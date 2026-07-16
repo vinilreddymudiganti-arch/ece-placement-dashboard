@@ -1,6 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+
+import ProfileCard from "../components/profile/ProfileCard";
+
+import React, { useState, useEffect } from "react";
+
 import {
   Flame,
   Calendar,
@@ -28,7 +32,7 @@ import {
   Zap
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Card, Badge, ProgressBar, Dialog } from '../components/ui-components';
+import { Card, Badge, ProgressBar, Dialog } from "../components/ui-components";
 
 // Types for Task Dashboard
 interface Task {
@@ -612,6 +616,8 @@ export default function PlacementDashboard() {
 
   return (
     <main className="min-h-screen bg-[#030712] text-gray-100 relative overflow-hidden pb-12">
+      <ProfileCard />
+
       {/* Background Radial Glows */}
       <div className="radial-glow-blue top-[-100px] left-[-100px]" />
       <div className="radial-glow-purple bottom-[100px] right-[-100px]" />
