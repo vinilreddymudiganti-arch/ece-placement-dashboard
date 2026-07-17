@@ -102,6 +102,7 @@ export default function PlacementDashboard() {
 
   // Today's Tasks State
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [plannerLoading, setPlannerLoading] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState<Task['category']>('DSA');
 
@@ -147,27 +148,15 @@ export default function PlacementDashboard() {
     const storedTasksDate = localStorage.getItem('ece_tasks_date');
     const storedTasks = localStorage.getItem('ece_tasks');
 
-    const defaultTasks: Task[] = [
-      { id: '1', text: 'Solve 3 problems on Sliding Window', completed: false, category: 'DSA' },
-      { id: '2', text: 'Revise Setup and Hold time configurations', completed: true, category: 'ECE' },
-      { id: '3', text: 'Take a 30-min Aptitude Quantitative Test', completed: false, category: 'Aptitude' },
-      { id: '4', text: 'Refine CV Embedded Projects description', completed: false, category: 'Other' },
-    ];
-
     if (storedTasks && storedTasksDate === todayDateStr) {
       // Same day — keep whatever progress you've made today
       setTasks(JSON.parse(storedTasks));
     } else if (storedTasks) {
-      // New day — keep the same task list/text, but uncheck everything
-      const carriedOverTasks: Task[] = JSON.parse(storedTasks).map((t: Task) => ({ ...t, completed: false }));
-      setTasks(carriedOverTasks);
-      localStorage.setItem('ece_tasks', JSON.stringify(carriedOverTasks));
-      localStorage.setItem('ece_tasks_date', todayDateStr);
+      // New day — let the AI generate a fresh plan based on real progress
+      generateAiPlan(JSON.parse(storedTasks));
     } else {
-      // First time ever
-      setTasks(defaultTasks);
-      localStorage.setItem('ece_tasks', JSON.stringify(defaultTasks));
-      localStorage.setItem('ece_tasks_date', todayDateStr);
+      // First time ever — no history yet, so generate from a clean slate
+      generateAiPlan([]);
     }
 
     // Real daily streak: increments once per calendar day you visit,
@@ -384,6 +373,83 @@ export default function PlacementDashboard() {
   };
 
   // --- ACTIONS ---
+
+  // AI Daily Planner — asks the AI to generate today's tasks based on
+  // actual DSA/ECE progress and what got done (or skipped) the last time.
+  const generateAiPlan = async (previousTasks: Task[]) => {
+    setPlannerLoading(true);
+    const todayDateStr = new Date().toISOString().slice(0, 10);
+    const defaultTasks: Task[] = [
+      { id: '1', text: 'Solve 3 problems on Sliding Window', completed: false, category: 'DSA' },
+      { id: '2', text: 'Revise Setup and Hold time configurations', completed: false, category: 'ECE' },
+      { id: '3', text: 'Take a 30-min Aptitude Quantitative Test', completed: false, category: 'Aptitude' },
+      { id: '4', text: 'Refine CV Embedded Projects description', completed: false, category: 'Other' },
+    ];
+
+    try {
+      const dsaRaw = localStorage.getItem('ece_dsa');
+      const eceRaw = localStorage.getItem('ece_roadmap');
+      const dsaData: DsaTopic[] = dsaRaw ? JSON.parse(dsaRaw) : [];
+      const eceData: EceTopic[] = eceRaw ? JSON.parse(eceRaw) : [];
+
+      const dsaTotalCount = dsaData.reduce((acc, t) => acc + t.problems.length, 0);
+      const dsaSolvedCount = dsaData.reduce((acc, t) => acc + t.problems.filter(p => p.solved).length, 0);
+      const weakDsaTopics = dsaData
+        .filter(t => t.problems.length > 0 && (t.problems.filter(p => p.solved).length / t.problems.length) < 0.5)
+        .map(t => t.name);
+
+      const eceTotalCount = eceData.reduce((acc, t) => acc + t.subTopics.length, 0);
+      const eceCompletedCount = eceData.reduce((acc, t) => acc + t.subTopics.filter(s => s.completed).length, 0);
+      const weakEceTopics = eceData
+        .filter(t => t.subTopics.length > 0 && (t.subTopics.filter(s => s.completed).length / t.subTopics.length) < 0.5)
+        .map(t => t.name);
+
+      const yesterdayCompleted = previousTasks.filter(t => t.completed).map(t => t.text);
+      const yesterdaySkipped = previousTasks.filter(t => !t.completed).map(t => t.text);
+      const currentStreak = parseInt(localStorage.getItem('ece_streak') || '1', 10);
+
+      const res = await fetch('/api/planner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dsaSolved: dsaSolvedCount,
+          dsaTotal: dsaTotalCount,
+          weakDsaTopics,
+          eceCompleted: eceCompletedCount,
+          eceTotal: eceTotalCount,
+          weakEceTopics,
+          streak: currentStreak,
+          yesterdayCompleted,
+          yesterdaySkipped,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Planner request failed');
+      const data = await res.json();
+      if (!data.tasks || !data.tasks.length) throw new Error('Planner returned no tasks');
+
+      const aiTasks: Task[] = data.tasks.map((t: { text: string; category: Task['category'] }, i: number) => ({
+        id: `ai-${Date.now()}-${i}`,
+        text: t.text,
+        completed: false,
+        category: t.category,
+      }));
+
+      setTasks(aiTasks);
+      localStorage.setItem('ece_tasks', JSON.stringify(aiTasks));
+      localStorage.setItem('ece_tasks_date', todayDateStr);
+    } catch (err) {
+      console.error('AI planner failed, falling back to carried-over tasks', err);
+      const fallbackTasks = previousTasks.length
+        ? previousTasks.map(t => ({ ...t, completed: false }))
+        : defaultTasks;
+      setTasks(fallbackTasks);
+      localStorage.setItem('ece_tasks', JSON.stringify(fallbackTasks));
+      localStorage.setItem('ece_tasks_date', todayDateStr);
+    } finally {
+      setPlannerLoading(false);
+    }
+  };
 
   // Streak celebration — just a fun confetti burst.
   // The streak count itself is tracked automatically by daily visits (see useEffect above),
@@ -808,8 +874,25 @@ export default function PlacementDashboard() {
                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                   <ListTodo className="w-5 h-5 text-purple-400" />
                   Today's Study Checklist
+                  <span className="text-[10px] font-medium text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> AI Planned
+                  </span>
                 </h2>
-                <Badge variant="purple">{tasks.filter(t => !t.completed).length} Remaining</Badge>
+                <div className="flex items-center gap-2">
+                  {plannerLoading ? (
+                    <span className="text-xs text-gray-400 animate-pulse">AI is planning today...</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => generateAiPlan(tasks)}
+                      className="text-xs text-gray-400 hover:text-purple-300 transition-colors flex items-center gap-1"
+                      title="Ask the AI to regenerate today's plan based on your latest progress"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> Regenerate
+                    </button>
+                  )}
+                  <Badge variant="purple">{tasks.filter(t => !t.completed).length} Remaining</Badge>
+                </div>
               </div>
 
               {/* Task Add Form */}
@@ -843,7 +926,12 @@ export default function PlacementDashboard() {
 
               {/* Task List */}
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                {tasks.length === 0 ? (
+                {plannerLoading ? (
+                  <p className="text-sm text-gray-500 py-4 text-center flex items-center justify-center gap-2">
+                    <Sparkles className="w-4 h-4 animate-pulse text-purple-400" />
+                    AI is building your personalized plan for today...
+                  </p>
+                ) : tasks.length === 0 ? (
                   <p className="text-sm text-gray-500 py-4 text-center">No tasks listed for today. Add some above!</p>
                 ) : (
                   tasks.map(task => (
