@@ -140,24 +140,54 @@ export default function PlacementDashboard() {
   useEffect(() => {
     setMounted(true);
 
-    // Initial Load from LocalStorage or default fallback data
+    // Initial Load from LocalStorage or default fallback data.
+    // "Today's Tasks" resets its checkmarks once per calendar day, so
+    // finishing your tasks today doesn't leave them stuck as "done" forever.
+    const todayDateStr = new Date().toISOString().slice(0, 10);
+    const storedTasksDate = localStorage.getItem('ece_tasks_date');
     const storedTasks = localStorage.getItem('ece_tasks');
-    if (storedTasks) {
+
+    const defaultTasks: Task[] = [
+      { id: '1', text: 'Solve 3 problems on Sliding Window', completed: false, category: 'DSA' },
+      { id: '2', text: 'Revise Setup and Hold time configurations', completed: true, category: 'ECE' },
+      { id: '3', text: 'Take a 30-min Aptitude Quantitative Test', completed: false, category: 'Aptitude' },
+      { id: '4', text: 'Refine CV Embedded Projects description', completed: false, category: 'Other' },
+    ];
+
+    if (storedTasks && storedTasksDate === todayDateStr) {
+      // Same day — keep whatever progress you've made today
       setTasks(JSON.parse(storedTasks));
+    } else if (storedTasks) {
+      // New day — keep the same task list/text, but uncheck everything
+      const carriedOverTasks: Task[] = JSON.parse(storedTasks).map((t: Task) => ({ ...t, completed: false }));
+      setTasks(carriedOverTasks);
+      localStorage.setItem('ece_tasks', JSON.stringify(carriedOverTasks));
+      localStorage.setItem('ece_tasks_date', todayDateStr);
     } else {
-      const defaultTasks: Task[] = [
-        { id: '1', text: 'Solve 3 problems on Sliding Window', completed: false, category: 'DSA' },
-        { id: '2', text: 'Revise Setup and Hold time configurations', completed: true, category: 'ECE' },
-        { id: '3', text: 'Take a 30-min Aptitude Quantitative Test', completed: false, category: 'Aptitude' },
-        { id: '4', text: 'Refine CV Embedded Projects description', completed: false, category: 'Other' },
-      ];
+      // First time ever
       setTasks(defaultTasks);
       localStorage.setItem('ece_tasks', JSON.stringify(defaultTasks));
+      localStorage.setItem('ece_tasks_date', todayDateStr);
     }
 
-    const storedStreak = localStorage.getItem('ece_streak');
-    if (storedStreak) {
-      setStreak(parseInt(storedStreak, 10));
+    // Real daily streak: increments once per calendar day you visit,
+    // continuing only if you visited yesterday too. Resets if you miss a day.
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const storedLastDate = localStorage.getItem('ece_streak_last_date');
+    const storedStreak = parseInt(localStorage.getItem('ece_streak') || '0', 10);
+
+    if (storedLastDate === todayStr) {
+      // Already counted today
+      setStreak(storedStreak || 1);
+    } else {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+      const newStreak = storedLastDate === yesterdayStr ? storedStreak + 1 : 1;
+      setStreak(newStreak);
+      localStorage.setItem('ece_streak', newStreak.toString());
+      localStorage.setItem('ece_streak_last_date', todayStr);
     }
 
     const storedDsa = localStorage.getItem('ece_dsa');
@@ -355,11 +385,10 @@ export default function PlacementDashboard() {
 
   // --- ACTIONS ---
 
-  // Streak Booster trigger
+  // Streak celebration — just a fun confetti burst.
+  // The streak count itself is tracked automatically by daily visits (see useEffect above),
+  // so clicking this can't be used to fake extra streak days.
   const triggerStreakJoy = () => {
-    const newStreak = streak + 1;
-    setStreak(newStreak);
-    localStorage.setItem('ece_streak', newStreak.toString());
     confetti({
       particleCount: 100,
       spread: 70,
@@ -610,7 +639,19 @@ export default function PlacementDashboard() {
     return requiredAvg > 10 ? -1 : Math.max(requiredAvg, 0);
   };
 
+  // If the target needs an average above 10 (impossible), show the best
+  // CGPA that's actually still reachable, so the message stays motivating
+  // instead of just saying "impossible".
+  const calculateMaxAchievableCgpa = () => {
+    if (remainingSems.length === 0) return currentCgpa;
+    const totalSems = semesters.length;
+    const totalCurrentPoints = activeSems.reduce((acc, s) => acc + s.cgpa, 0);
+    const maxPoints = totalCurrentPoints + remainingSems.length * 10;
+    return maxPoints / totalSems;
+  };
+
   const requiredCgpa = calculateRequiredCgpa();
+  const maxAchievableCgpa = calculateMaxAchievableCgpa();
 
   if (!mounted) return <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center">Loading Dashboard...</div>;
 
@@ -745,8 +786,10 @@ export default function PlacementDashboard() {
             <div>
               <div className="text-xs text-gray-400 flex items-center justify-between">
                 <span>Target: {targetCgpa.toFixed(1)}</span>
-                <span className={requiredCgpa === -1 ? 'text-rose-400 font-bold' : 'text-gray-400'}>
-                  {requiredCgpa === -1 ? 'Target impossible' : `Need Sem avg: ${requiredCgpa.toFixed(2)}`}
+                <span className={requiredCgpa === -1 ? 'text-amber-400 font-semibold' : 'text-gray-400'}>
+                  {requiredCgpa === -1
+                    ? `Max reachable: ${maxAchievableCgpa.toFixed(2)} — aim for that!`
+                    : `Need Sem avg: ${requiredCgpa.toFixed(2)}`}
                 </span>
               </div>
             </div>
