@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// This route runs on the server only. Your API key is read from an
+// environment variable and is NEVER sent to the browser.
 export const runtime = "nodejs";
 
 interface IncomingMessage {
@@ -20,13 +22,13 @@ Format responses in Markdown.`;
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
           error:
-            "Missing ANTHROPIC_API_KEY on the server. Add it in your Vercel project's Environment Variables (or .env.local for local dev) and redeploy.",
+            "Missing GROQ_API_KEY on the server. Add it in your Vercel project's Environment Variables (or .env.local for local dev) and redeploy.",
         },
         { status: 500 }
       );
@@ -39,31 +41,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No messages provided." }, { status: 400 });
     }
 
-    const anthropicMessages = messages
-      .filter((m) => m.text && m.text.trim().length > 0)
-      .map((m) => ({
-        role: m.sender === "user" ? "user" : "assistant",
-        content: m.text,
-      }));
+    const groqMessages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...messages
+        .filter((m) => m.text && m.text.trim().length > 0)
+        .map((m) => ({
+          role: m.sender === "user" ? "user" : "assistant",
+          content: m.text,
+        })),
+    ];
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "claude-sonnet-5",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
-        messages: anthropicMessages,
+        messages: groqMessages,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Anthropic API error:", response.status, errText);
+      console.error("Groq API error:", response.status, errText);
       return NextResponse.json(
         { error: "The AI coach is temporarily unavailable. Please try again." },
         { status: 502 }
@@ -71,11 +74,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json();
-
-    const text = (data.content ?? [])
-      .filter((block: { type: string }) => block.type === "text")
-      .map((block: { text: string }) => block.text)
-      .join("\n");
+    const text = data.choices?.[0]?.message?.content ?? "";
 
     return NextResponse.json({ text: text || "Sorry, I couldn't generate a response." });
   } catch (err) {
