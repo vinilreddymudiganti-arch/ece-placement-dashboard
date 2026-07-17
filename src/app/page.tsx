@@ -524,10 +524,10 @@ export default function PlacementDashboard() {
     saveToLocal('ece_notes', updated);
   };
 
-  // AI Mock Chat Coach Handler
-  const handleSendChatMessage = (e: React.FormEvent) => {
+  // AI Chat Coach Handler — calls the real Claude API via our server route
+  const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || aiTyping) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -536,44 +536,44 @@ export default function PlacementDashboard() {
       timestamp: new Date()
     };
 
-    setChatMessages(prev => [...prev, userMsg]);
+    const updatedMessages = [...chatMessages, userMsg];
+    setChatMessages(updatedMessages);
     setChatInput('');
     setAiTyping(true);
 
-    // Simulate thinking delay and route response
-    setTimeout(() => {
-      const text = userMsg.text.toLowerCase();
-      let aiText = '';
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // Send recent history for context (last 20 messages keeps requests light)
+          messages: updatedMessages.slice(-20).map(m => ({ sender: m.sender, text: m.text }))
+        })
+      });
 
-      if (text.includes('setup') || text.includes('hold') || text.includes('sta') || text.includes('timing')) {
-        aiText = `### Setup & Hold Time Revision ⏱️\n\nFor digital circuit placements, **Static Timing Analysis (STA)** is one of the most frequently asked concepts. Here is a review:\n\n1. **Setup Time (\\(T_s\\))**: The minimum time before the clock edge that data must be stable at the flip-flop input.\n   - **Equation**: \\(T_c \\ge T_{cq} + T_{comb} + T_s - T_{skew}\\)\n   - **Setup Violation**: Occurs if the clock path is too fast or combinational delay \\(T_{comb}\\) is too slow.\n\n2. **Hold Time (\\(T_h\\))**: The minimum time after the clock edge that data must remain stable.\n   - **Equation**: \\(T_{cq} + T_{comb} \\ge T_h + T_{skew}\\)\n   - **Hold Violation**: Occurs if the combinational path is too fast (e.g. wire/buffer only) so data overwrite happens before hold requirements are met. Note that hold time is independent of clock frequency.\n\n*Question for you:* How do we fix a setup violation versus a hold violation in a physical layout design? (Let me know if you want the answer!)`;
-      } else if (text.includes('mosfet') || text.includes('cmos') || text.includes('inverter') || text.includes('vtc')) {
-        aiText = `### MOSFET & CMOS Inverter Cheat Sheet 🔌\n\nLet's break down CMOS logic and MOSFET operation:\n\n*   **MOSFET Modes of Operation**:\n    *   **Cut-off**: \\(V_{GS} < V_{th}\\). Current \\(I_D \\approx 0\\).\n    *   **Linear/Triode**: \\(V_{GS} \\ge V_{th}\\) and \\(V_{DS} < V_{GS} - V_{th}\\).\n        - Equation: \\(I_D = \\mu_n C_{ox} \\frac{W}{L} \\left[ (V_{GS}-V_{th})V_{DS} - \\frac{1}{2}V_{DS}^2 \\right]\\)\n    *   **Saturation (Pinch-off)**: \\(V_{GS} \\ge V_{th}\\) and \\(V_{DS} \\ge V_{GS} - V_{th}\\).\n        - Equation: \\(I_D = \\frac{1}{2} \\mu_n C_{ox} \\frac{W}{L} (V_{GS}-V_{th})^2\\)\n\n*   **CMOS Inverter VTC (Voltage Transfer Curve)**:\n    - **Region 1 (Cutoff NMOS, Linear PMOS)**: Input is logic Low. Output is \\(V_{DD}\\).\n    - **Region 2 (Sat NMOS, Linear PMOS)**: Input rises slightly.\n    - **Region 3 (Sat NMOS, Sat PMOS)**: High gain region. Output drops rapidly. Switching threshold \\(V_{sp}\\) is where \\(V_{in} = V_{out}\\).\n    - **Region 4 (Linear NMOS, Sat PMOS)**: Input close to \\(V_{DD}\\).\n    - **Region 5 (Linear NMOS, Cutoff PMOS)**: Input is logic High. Output is 0V.\n\nWould you like to practice calculating the Switching Threshold \\(V_{sp}\\)?`;
-      } else if (text.includes('coin') || text.includes('change') || text.includes('dp') || text.includes('dynamic')) {
-        aiText = `### Dynamic Programming Strategy: Coin Change 🪙\n\nThe Coin Change problem ("Given coins of different denominations and a total amount, find the minimum number of coins to make up that amount") is a classic placement question.\n\n*   **State Definition**: Let \\(dp[i]\\) be the minimum coins required to make up amount \\(i\\).\n*   **Base Case**: \\(dp[0] = 0\\) (0 coins needed for amount 0).\n*   **Transition Relation**:\n    \\[dp[i] = \\min_{c \\in \\text{coins}} (dp[i - c] + 1) \\quad \\text{if } i - c \\ge 0\\]\n*   **C++ / Java Implementation snippet**:\n    \`\`\`cpp\n    vector<int> dp(amount + 1, amount + 1);\n    dp[0] = 0;\n    for (int i = 1; i <= amount; i++) {\n        for (int coin : coins) {\n            if (i - coin >= 0) {\n                dp[i] = min(dp[i], dp[i - coin] + 1);\n            }\n        }\n    }\n    return dp[amount] > amount ? -1 : dp[amount];\n    \`\`\`\n*   **Complexity**: Time complexity is \\(O(\\text{amount} \\times n)\\), where \\(n\\) is the number of coin types. Space is \\(O(\\text{amount})\\).`;
-      } else if (text.includes('interview') || text.includes('question') || text.includes('mock')) {
-        const interviewQuestions = [
-          `**ECE Mock Question**: Explain the difference between Latches and Flip-Flops. What are their respective triggering methods, and why are flip-flops preferred in synchronous designs?`,
-          `**DSA Mock Question**: Given a binary tree, check if it is a binary search tree (BST). Note that checking left < root and right > root recursively is *insufficient*. What is the correct O(N) approach?`,
-          `**Embedded Mock Question**: Explain UART packet structure. Why does UART not require a shared clock line, and how do receiver and transmitter agree on timing (Baud rate)?`,
-          `**OS Mock Question**: What is the difference between a Process and a Thread? Describe how Context Switching overhead differs between the two.`
-        ];
-        const randomQuestion = interviewQuestions[Math.floor(Math.random() * interviewQuestions.length)];
-        aiText = `### 🎯 Practice Interview Question\n\nHere is a high-yield question for your upcoming placements:\n\n${randomQuestion}\n\n*Draft your answer in the Notes panel or reply to me with your points, and I will critique it!*`;
-      } else if (text.includes('streak') || text.includes('motivate') || text.includes('motivation')) {
-        aiText = `### Keep Burning Bright! 🔥\n\nYou are on a **${streak}-day study streak**. Here is your motivation for today:\n\n> "Consistency is not about perfection. It is about showing up daily and making 1% progress."\n\nLooking at your stats, you have completed some core topics, but some heavy topics like **Dynamic Programming** and **STA (Static Timing Analysis)** are still pending. Set a 1-hour block today to tackle one sub-topic. You've got this!`;
-      } else {
-        aiText = `### ECE Placement Coach 🎓\n\nI received your message: "${userMsg.text}".\n\nLet's keep our placement prep focused. I can guide you on:\n- **Core ECE Theory**: VLSI design, Digital Electronics, Embedded Protocols (I2C/SPI), RTOS concepts.\n- **CS / DSA Topics**: Stacks, Graphs, Trees, Dynamic Programming, Operating Systems, Computer Networks.\n- **Resume / HR advice**: How to structure your capstone projects.\n\nWhat topic would you like to review or get a mock question for?`;
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to reach the AI coach.');
       }
 
       setChatMessages(prev => [...prev, {
-        id: Date.now().toString(),
+        id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: aiText,
+        text: data.text,
         timestamp: new Date()
       }]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Something went wrong.';
+      setChatMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: `⚠️ ${message}`,
+        timestamp: new Date()
+      }]);
+    } finally {
       setAiTyping(false);
-    }, 1200);
+    }
   };
 
   // --- STATS / CALCULATIONS ---
