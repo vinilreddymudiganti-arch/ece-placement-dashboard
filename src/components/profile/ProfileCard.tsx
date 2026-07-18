@@ -1,7 +1,11 @@
-export default function ProfileCard() {
+interface ProfileCardProps {
+  name: string;
+}
+
+export default function ProfileCard({ name }: ProfileCardProps) {
   return (
     <div className="rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-lg">
-      <h2 className="text-2xl font-bold">👋 Welcome Back, Vinil</h2>
+      <h2 className="text-2xl font-bold">👋 Welcome Back, {name}</h2>
 
       <p className="mt-2 text-gray-400">
         Electronics & Communication Engineering
