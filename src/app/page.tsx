@@ -98,6 +98,8 @@ export default function PlacementDashboard() {
   const [mounted, setMounted] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState('');
+  const [currentCgpaInput, setCurrentCgpaInput] = useState('');
+  const [targetCgpaInput, setTargetCgpaInput] = useState('');
   const [streak, setStreak] = useState(5);
   const [countdownDate, setCountdownDate] = useState('2026-09-01');
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -380,16 +382,47 @@ export default function PlacementDashboard() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = nameInput.trim();
-    if (!trimmed) return;
-    localStorage.setItem('ece_user_name', trimmed);
-    setUserName(trimmed);
+    const trimmedName = nameInput.trim();
+    const currentVal = parseFloat(currentCgpaInput);
+    const targetVal = parseFloat(targetCgpaInput);
+
+    if (!trimmedName) return;
+    if (isNaN(currentVal) || currentVal < 0 || currentVal > 10) return;
+    if (isNaN(targetVal) || targetVal < 0 || targetVal > 10) return;
+
+    const isFirstEverLogin = !localStorage.getItem('ece_user_name');
+
+    localStorage.setItem('ece_user_name', trimmedName);
+    localStorage.setItem('ece_current_cgpa', currentVal.toString());
+    localStorage.setItem('ece_target_cgpa', targetVal.toString());
+    setTargetCgpa(targetVal);
+
+    // Only seed the semester breakdown with real data the very first time —
+    // if they've already logged in before and customized the CGPA Tracker, leave it untouched.
+    if (isFirstEverLogin) {
+      const seededSemesters: SemesterCGPA[] = [
+        { semester: 1, cgpa: currentVal, active: true },
+        { semester: 2, cgpa: currentVal, active: true },
+        { semester: 3, cgpa: 0, active: false },
+        { semester: 4, cgpa: 0, active: false },
+        { semester: 5, cgpa: 0, active: false },
+        { semester: 6, cgpa: 0, active: false },
+        { semester: 7, cgpa: 0, active: false },
+        { semester: 8, cgpa: 0, active: false },
+      ];
+      setSemesters(seededSemesters);
+      localStorage.setItem('ece_cgpa_semesters', JSON.stringify(seededSemesters));
+    }
+
+    setUserName(trimmedName);
   };
 
   const handleChangeName = () => {
     localStorage.removeItem('ece_user_name');
     setUserName(null);
     setNameInput('');
+    setCurrentCgpaInput('');
+    setTargetCgpaInput('');
   };
 
 
@@ -426,6 +459,8 @@ export default function PlacementDashboard() {
       const yesterdayCompleted = previousTasks.filter(t => t.completed).map(t => t.text);
       const yesterdaySkipped = previousTasks.filter(t => !t.completed).map(t => t.text);
       const currentStreak = parseInt(localStorage.getItem('ece_streak') || '1', 10);
+      const cgpaNow = parseFloat(localStorage.getItem('ece_current_cgpa') || '0') || currentCgpa;
+      const cgpaTarget = parseFloat(localStorage.getItem('ece_target_cgpa') || '0') || targetCgpa;
 
       const res = await fetch('/api/planner', {
         method: 'POST',
@@ -440,6 +475,8 @@ export default function PlacementDashboard() {
           streak: currentStreak,
           yesterdayCompleted,
           yesterdaySkipped,
+          currentCgpa: cgpaNow,
+          targetCgpa: cgpaTarget,
         }),
       });
 
@@ -748,15 +785,47 @@ export default function PlacementDashboard() {
           className="w-full max-w-sm rounded-2xl border border-white/10 bg-gray-900/60 backdrop-blur-xl p-8 shadow-2xl"
         >
           <h1 className="text-2xl font-bold mb-1">👋 Welcome</h1>
-          <p className="text-sm text-gray-400 mb-6">What should we call you?</p>
+          <p className="text-sm text-gray-400 mb-6">Let&apos;s set up your dashboard</p>
+
+          <label className="text-xs text-gray-400 mb-1 block">Your name</label>
           <input
             type="text"
             autoFocus
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
-            placeholder="Your name"
+            placeholder="e.g. Vinil"
             className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4"
           />
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Current CGPA</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                value={currentCgpaInput}
+                onChange={(e) => setCurrentCgpaInput(e.target.value)}
+                placeholder="e.g. 8.52"
+                className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Target CGPA</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                value={targetCgpaInput}
+                onChange={(e) => setTargetCgpaInput(e.target.value)}
+                placeholder="e.g. 8.8"
+                className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
+
           <button
             type="submit"
             className="w-full bg-purple-600 hover:bg-purple-500 transition-colors rounded-xl px-4 py-3 font-semibold"
@@ -764,7 +833,7 @@ export default function PlacementDashboard() {
             Continue
           </button>
           <p className="text-xs text-gray-500 mt-4 text-center">
-            No password needed — this just personalizes your dashboard on this device.
+            No password needed — this just personalizes your dashboard and daily plan on this device.
           </p>
         </form>
       </div>
@@ -773,7 +842,7 @@ export default function PlacementDashboard() {
 
   return (
     <main className="min-h-screen bg-[#030712] text-gray-100 relative overflow-hidden pb-12">
-      <ProfileCard name={userName} />
+      <ProfileCard name={userName} currentCgpa={currentCgpa} targetCgpa={targetCgpa} />
       <button
         type="button"
         onClick={handleChangeName}
