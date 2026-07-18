@@ -96,6 +96,8 @@ interface ChatMessage {
 export default function PlacementDashboard() {
   // --- STATE ---
   const [mounted, setMounted] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState('');
   const [streak, setStreak] = useState(5);
   const [countdownDate, setCountdownDate] = useState('2026-09-01');
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -140,6 +142,8 @@ export default function PlacementDashboard() {
   // --- INITIALIZATION & LOCAL STORAGE ---
   useEffect(() => {
     setMounted(true);
+    const storedName = localStorage.getItem('ece_user_name');
+    if (storedName) setUserName(storedName);
 
     // Initial Load from LocalStorage or default fallback data.
     // "Today's Tasks" resets its checkmarks once per calendar day, so
@@ -373,6 +377,21 @@ export default function PlacementDashboard() {
   };
 
   // --- ACTIONS ---
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = nameInput.trim();
+    if (!trimmed) return;
+    localStorage.setItem('ece_user_name', trimmed);
+    setUserName(trimmed);
+  };
+
+  const handleChangeName = () => {
+    localStorage.removeItem('ece_user_name');
+    setUserName(null);
+    setNameInput('');
+  };
+
 
   // AI Daily Planner — asks the AI to generate today's tasks based on
   // actual DSA/ECE progress and what got done (or skipped) the last time.
@@ -721,9 +740,47 @@ export default function PlacementDashboard() {
 
   if (!mounted) return <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center">Loading Dashboard...</div>;
 
+  if (!userName) {
+    return (
+      <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center px-4">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-sm rounded-2xl border border-white/10 bg-gray-900/60 backdrop-blur-xl p-8 shadow-2xl"
+        >
+          <h1 className="text-2xl font-bold mb-1">👋 Welcome</h1>
+          <p className="text-sm text-gray-400 mb-6">What should we call you?</p>
+          <input
+            type="text"
+            autoFocus
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            placeholder="Your name"
+            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4"
+          />
+          <button
+            type="submit"
+            className="w-full bg-purple-600 hover:bg-purple-500 transition-colors rounded-xl px-4 py-3 font-semibold"
+          >
+            Continue
+          </button>
+          <p className="text-xs text-gray-500 mt-4 text-center">
+            No password needed — this just personalizes your dashboard on this device.
+          </p>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#030712] text-gray-100 relative overflow-hidden pb-12">
-      <ProfileCard />
+      <ProfileCard name={userName} />
+      <button
+        type="button"
+        onClick={handleChangeName}
+        className="text-xs text-gray-500 hover:text-gray-300 transition-colors mt-2 ml-1"
+      >
+        Not you? Change name
+      </button>
 
       {/* Background Radial Glows */}
       <div className="radial-glow-blue top-[-100px] left-[-100px]" />
