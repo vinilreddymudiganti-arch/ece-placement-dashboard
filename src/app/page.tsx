@@ -8,6 +8,7 @@ import React, { useState, useEffect } from "react";
 import {
   Flame,
   Calendar,
+  ExternalLink,
   ListTodo,
   Code2,
   Cpu,
@@ -1496,14 +1497,26 @@ export default function PlacementDashboard() {
                     {prob.name}
                   </span>
                 </div>
-                <Badge
-                  variant={
-                    prob.difficulty === 'Easy' ? 'green' :
-                    prob.difficulty === 'Medium' ? 'orange' : 'pink'
-                  }
-                >
-                  {prob.difficulty}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://www.geeksforgeeks.org/?s=${encodeURIComponent(prob.name)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                    title={`Search "${prob.name}" on GeeksforGeeks`}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                  <Badge
+                    variant={
+                      prob.difficulty === 'Easy' ? 'green' :
+                      prob.difficulty === 'Medium' ? 'orange' : 'pink'
+                    }
+                  >
+                    {prob.difficulty}
+                  </Badge>
+                </div>
               </div>
             ))}
           </div>
