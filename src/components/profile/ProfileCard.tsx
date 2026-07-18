@@ -1,8 +1,10 @@
 interface ProfileCardProps {
   name: string;
+  currentCgpa?: number;
+  targetCgpa?: number;
 }
 
-export default function ProfileCard({ name }: ProfileCardProps) {
+export default function ProfileCard({ name, currentCgpa, targetCgpa }: ProfileCardProps) {
   return (
     <div className="rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-lg">
       <h2 className="text-2xl font-bold">👋 Welcome Back, {name}</h2>
@@ -15,7 +17,10 @@ export default function ProfileCard({ name }: ProfileCardProps) {
         <p>🎓 College: IARE</p>
         <p>📚 Semester: 3</p>
         <p>🎯 Goal: Core + IT Placements</p>
-        <p>📈 CGPA Target: 8.8+</p>
+        {typeof currentCgpa === 'number' && (
+          <p>📊 Current CGPA: {currentCgpa.toFixed(2)}</p>
+        )}
+        <p>📈 CGPA Target: {typeof targetCgpa === 'number' ? targetCgpa.toFixed(1) : '8.8'}+</p>
       </div>
 
       <div className="mt-6">
